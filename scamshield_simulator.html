@@ -1,0 +1,939 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ScamShield Simulator</title>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.15.0/dist/tf.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0f1117;
+    --card: #1a1d27;
+    --surface: #12151f;
+    --surface2: #20243a;
+    --border: rgba(255,255,255,0.08);
+    --border2: rgba(255,255,255,0.14);
+    --text: #e8eaf0;
+    --muted: #8b8fa8;
+    --hint: #555870;
+    --accent-blue: #3b8eea;
+    --accent-blue2: #5ba4f5;
+    --accent-red: #e24b4a;
+    --accent-green: #4caf7d;
+    --accent-amber: #f0a832;
+    --accent-purple: #9b7fe8;
+    --radius: 12px;
+    --radius-sm: 8px;
+  }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+  a { color: var(--accent-blue); }
+  .wrap { max-width: 800px; margin: 0 auto; padding: 20px 16px 60px; }
+  .screen { display: none; }
+  .screen.active { display: block; }
+
+  /* NAV */
+  .nav { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-bottom: 0.5px solid var(--border); background: var(--card); position: sticky; top: 0; z-index: 100; }
+  .nav-logo { font-size: 15px; font-weight: 600; color: var(--accent-blue2); letter-spacing: 0.04em; display: flex; align-items: center; gap: 8px; }
+  .nav-logo svg { width: 22px; height: 22px; }
+  .nav-score { background: var(--surface2); border: 0.5px solid var(--border2); border-radius: 999px; padding: 5px 14px; font-size: 13px; font-weight: 500; display: flex; align-items: center; gap: 6px; }
+  .nav-score .pts { color: var(--accent-blue2); }
+
+  /* HERO */
+  .hero { text-align: center; padding: 3rem 1rem 2rem; }
+  .hero-badge { display: inline-flex; align-items: center; gap: 6px; background: rgba(59,142,234,0.12); border: 0.5px solid rgba(59,142,234,0.3); border-radius: 999px; padding: 5px 14px; font-size: 12px; color: var(--accent-blue2); margin-bottom: 1.5rem; font-weight: 500; }
+  .hero h1 { font-size: 36px; font-weight: 700; margin-bottom: 12px; line-height: 1.2; }
+  .hero h1 span { color: var(--accent-blue2); }
+  .hero p { font-size: 16px; color: var(--muted); max-width: 500px; margin: 0 auto 2rem; line-height: 1.7; }
+
+  .badge-row { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; margin-bottom: 2rem; }
+  .pill { padding: 5px 14px; border-radius: 999px; font-size: 12px; font-weight: 500; border: 0.5px solid var(--border2); color: var(--muted); background: var(--surface); }
+
+  .start-btn { display: inline-flex; align-items: center; gap: 8px; padding: 13px 32px; background: var(--accent-blue); color: #fff; border: none; border-radius: var(--radius-sm); font-size: 15px; font-weight: 600; cursor: pointer; margin-bottom: 12px; transition: opacity 0.2s; }
+  .start-btn:hover { opacity: 0.88; }
+
+  /* STATS */
+  .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 2rem; }
+  .stat-card { background: var(--card); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 1.2rem; text-align: center; }
+  .stat-card .num { font-size: 22px; font-weight: 700; color: var(--accent-blue2); }
+  .stat-card .lbl { font-size: 12px; color: var(--muted); margin-top: 5px; line-height: 1.5; }
+
+  /* ML SECTION */
+  .ml-section { background: var(--card); border: 0.5px solid rgba(155,127,232,0.3); border-radius: var(--radius); padding: 1.5rem; margin-bottom: 2rem; }
+  .ml-section-title { font-size: 14px; font-weight: 600; color: var(--accent-purple); margin-bottom: 4px; display: flex; align-items: center; gap: 8px; }
+  .ml-section-sub { font-size: 13px; color: var(--muted); margin-bottom: 1rem; line-height: 1.6; }
+  .ml-input-wrap { display: flex; gap: 8px; margin-bottom: 1rem; }
+  .ml-input { flex: 1; background: var(--surface2); border: 0.5px solid var(--border2); border-radius: var(--radius-sm); padding: 10px 14px; font-size: 13px; color: var(--text); outline: none; }
+  .ml-input:focus { border-color: var(--accent-purple); }
+  .ml-btn { background: var(--accent-purple); color: #fff; border: none; border-radius: var(--radius-sm); padding: 10px 18px; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; transition: opacity 0.2s; }
+  .ml-btn:hover { opacity: 0.85; }
+  .ml-btn:disabled { opacity: 0.4; cursor: default; }
+  .ml-result { background: var(--surface2); border-radius: var(--radius-sm); padding: 14px; }
+  .ml-result-label { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+  .ml-bar-wrap { margin-bottom: 8px; }
+  .ml-bar-label { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 4px; }
+  .ml-bar { height: 8px; background: var(--border); border-radius: 999px; overflow: hidden; }
+  .ml-bar-fill { height: 100%; border-radius: 999px; transition: width 0.6s; }
+  .ml-verdict { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; margin-top: 10px; padding: 10px 14px; border-radius: var(--radius-sm); }
+  .ml-verdict.scam { background: rgba(226,75,74,0.15); color: var(--accent-red); border: 0.5px solid rgba(226,75,74,0.3); }
+  .ml-verdict.safe { background: rgba(76,175,125,0.12); color: var(--accent-green); border: 0.5px solid rgba(76,175,125,0.3); }
+  .ml-features { margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .ml-feature-chip { display: inline-flex; align-items: center; gap: 4px; background: var(--surface); border: 0.5px solid var(--border2); border-radius: 999px; padding: 3px 10px; margin: 3px; font-size: 11px; }
+  .ml-feature-chip.danger { border-color: rgba(226,75,74,0.4); color: #f09595; }
+  .ml-feature-chip.safe { border-color: rgba(76,175,125,0.4); color: #97c459; }
+
+  /* SCENARIO LIST */
+  .section-title { font-size: 16px; font-weight: 600; margin-bottom: 14px; color: var(--text); }
+  .s-item { display: flex; align-items: center; gap: 12px; padding: 12px 14px; background: var(--card); border: 0.5px solid var(--border); border-radius: var(--radius-sm); margin-bottom: 8px; cursor: pointer; transition: border-color 0.15s, background 0.15s; }
+  .s-item:hover { border-color: var(--accent-blue); background: var(--surface2); }
+  .s-icon { width: 38px; height: 38px; border-radius: var(--radius-sm); background: var(--surface2); display: flex; align-items: center; justify-content: center; font-size: 17px; flex-shrink: 0; }
+  .s-title { font-size: 14px; font-weight: 500; color: var(--text); }
+  .s-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .s-diff { font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 999px; }
+  .diff-easy { background: rgba(76,175,125,0.12); color: var(--accent-green); }
+  .diff-med { background: rgba(240,168,50,0.12); color: var(--accent-amber); }
+  .diff-hard { background: rgba(226,75,74,0.12); color: var(--accent-red); }
+
+  /* GAME HEADER */
+  .game-header { display: flex; align-items: center; gap: 12px; margin-bottom: 1.2rem; flex-wrap: wrap; }
+  .back-btn { background: var(--surface2); border: 0.5px solid var(--border2); border-radius: var(--radius-sm); padding: 7px 14px; cursor: pointer; font-size: 13px; color: var(--muted); display: flex; align-items: center; gap: 6px; transition: border-color 0.15s; }
+  .back-btn:hover { border-color: var(--accent-blue); color: var(--text); }
+  .progress-wrap { flex: 1; min-width: 140px; }
+  .progress-label { font-size: 12px; color: var(--muted); margin-bottom: 5px; display: flex; justify-content: space-between; }
+  .progress-bar { height: 6px; background: var(--surface2); border-radius: 999px; overflow: hidden; }
+  .progress-fill { height: 100%; background: linear-gradient(90deg, var(--accent-blue), var(--accent-blue2)); border-radius: 999px; transition: width 0.4s; }
+  .score-badge { background: var(--surface2); border: 0.5px solid var(--border2); border-radius: var(--radius-sm); padding: 7px 14px; font-size: 13px; font-weight: 600; color: var(--accent-blue2); white-space: nowrap; }
+
+  .risk-meter { display: flex; align-items: center; gap: 10px; margin-bottom: 1rem; background: var(--card); border: 0.5px solid var(--border); border-radius: var(--radius-sm); padding: 10px 14px; }
+  .risk-label { font-size: 12px; color: var(--muted); flex-shrink: 0; }
+  .risk-bar { flex: 1; height: 8px; background: var(--surface2); border-radius: 999px; overflow: hidden; }
+  .risk-fill { height: 100%; border-radius: 999px; transition: width 0.5s, background 0.5s; }
+  .risk-text { font-size: 12px; font-weight: 600; flex-shrink: 0; }
+
+  /* SCENARIO CARD */
+  .scenario-card { background: var(--card); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 1.25rem; margin-bottom: 1rem; }
+  .scenario-tag { font-size: 11px; font-weight: 600; padding: 4px 11px; border-radius: 999px; background: var(--surface2); color: var(--muted); display: inline-block; margin-bottom: 10px; letter-spacing: 0.04em; }
+  .scenario-title { font-size: 17px; font-weight: 600; color: var(--text); margin-bottom: 14px; }
+
+  /* MOCKS */
+  .email-mock { background: #1e2030; border: 0.5px solid var(--border2); border-radius: var(--radius-sm); overflow: hidden; }
+  .email-header { background: #171928; border-bottom: 0.5px solid var(--border); padding: 12px 14px; }
+  .email-from { font-size: 12px; color: var(--muted); }
+  .email-from strong { color: var(--text); font-weight: 500; }
+  .email-date { font-size: 11px; color: var(--hint); float: right; }
+  .email-subject { font-size: 14px; font-weight: 600; color: var(--text); margin-top: 5px; }
+  .email-body { padding: 14px; font-size: 13px; color: #c8cad8; line-height: 1.8; }
+  .email-hl { background: rgba(240,168,50,0.2); color: var(--accent-amber); padding: 2px 6px; border-radius: 4px; font-size: 12px; }
+
+  .chat-mock { background: #1e2030; border: 0.5px solid var(--border2); border-radius: var(--radius-sm); padding: 14px; }
+  .chat-bubble { max-width: 82%; padding: 10px 13px; border-radius: 14px; margin-bottom: 8px; font-size: 13px; line-height: 1.65; }
+  .bubble-in { background: #2a2d3e; color: var(--text); }
+  .bubble-out { background: var(--accent-blue); color: #fff; margin-left: auto; }
+  .bubble-label { font-size: 11px; color: var(--hint); margin-bottom: 8px; }
+
+  .sms-mock { background: #1e2030; border: 0.5px solid var(--border2); border-radius: var(--radius-sm); padding: 14px; font-size: 13px; color: #c8cad8; line-height: 1.8; }
+  .sms-sender { font-size: 11px; font-weight: 600; color: var(--muted); margin-bottom: 8px; }
+
+  .popup-mock { background: rgba(226,75,74,0.08); border: 1.5px solid rgba(226,75,74,0.4); border-radius: var(--radius-sm); padding: 16px 18px; }
+  .popup-title { font-size: 15px; font-weight: 700; color: var(--accent-red); margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+  .popup-body { font-size: 13px; color: #f09595; line-height: 1.7; }
+
+  .qr-mock { background: #1e2030; border: 0.5px solid var(--border2); border-radius: var(--radius-sm); padding: 18px; text-align: center; }
+  .qr-box { width: 90px; height: 90px; background: #fff; border-radius: 8px; margin: 0 auto 10px; display: flex; align-items: center; justify-content: center; font-size: 44px; }
+  .qr-lbl { font-size: 12px; color: var(--muted); }
+
+  .fake-site { background: #1e2030; border: 0.5px solid var(--border2); border-radius: var(--radius-sm); overflow: hidden; }
+  .fake-site-bar { background: #12141e; padding: 8px 12px; font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 8px; border-bottom: 0.5px solid var(--border); }
+  .fake-site-url { background: rgba(226,75,74,0.1); border: 0.5px solid rgba(226,75,74,0.3); border-radius: 4px; padding: 3px 10px; color: #f09595; font-size: 12px; flex: 1; }
+  .fake-site-body { padding: 14px; font-size: 13px; color: #c8cad8; line-height: 1.8; }
+
+  /* OPTIONS */
+  .options-wrap h3 { font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.06em; }
+  .option-btn { width: 100%; text-align: left; padding: 11px 14px; background: var(--card); border: 0.5px solid var(--border2); border-radius: var(--radius-sm); cursor: pointer; margin-bottom: 8px; font-size: 14px; color: var(--text); display: flex; align-items: center; gap: 10px; transition: border-color 0.15s, background 0.15s; }
+  .option-btn:hover:not(:disabled) { border-color: var(--accent-blue); background: var(--surface2); }
+  .option-btn.selected { border-color: var(--accent-blue); background: rgba(59,142,234,0.08); }
+  .option-btn.correct { border-color: var(--accent-green); background: rgba(76,175,125,0.1); color: var(--accent-green); }
+  .option-btn.wrong { border-color: var(--accent-red); background: rgba(226,75,74,0.08); color: #f09595; }
+  .option-btn:disabled { cursor: default; }
+  .opt-key { width: 26px; height: 26px; border-radius: 6px; background: var(--surface2); border: 0.5px solid var(--border2); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; flex-shrink: 0; color: var(--muted); }
+  .option-btn.selected .opt-key { background: var(--accent-blue); border-color: var(--accent-blue); color: #fff; }
+  .option-btn.correct .opt-key { background: var(--accent-green); border-color: var(--accent-green); color: #fff; }
+  .option-btn.wrong .opt-key { background: var(--accent-red); border-color: var(--accent-red); color: #fff; }
+
+  .submit-btn { display: block; width: 100%; padding: 12px; background: var(--accent-blue); color: #fff; border: none; border-radius: var(--radius-sm); font-size: 14px; font-weight: 600; cursor: pointer; transition: opacity 0.2s; }
+  .submit-btn:hover { opacity: 0.88; }
+  .submit-btn:disabled { opacity: 0.35; cursor: default; }
+
+  /* FEEDBACK */
+  .feedback-card { border-radius: var(--radius); padding: 1.25rem; margin: 1rem 0; }
+  .feedback-card.correct { background: rgba(76,175,125,0.08); border: 0.5px solid rgba(76,175,125,0.3); }
+  .feedback-card.wrong { background: rgba(226,75,74,0.08); border: 0.5px solid rgba(226,75,74,0.3); }
+  .feedback-title { font-size: 15px; font-weight: 600; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .feedback-card.correct .feedback-title { color: var(--accent-green); }
+  .feedback-card.wrong .feedback-title { color: var(--accent-red); }
+  .red-flag { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; margin-bottom: 7px; color: #c8cad8; line-height: 1.5; }
+  .flag-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent-red); margin-top: 6px; flex-shrink: 0; }
+  .learning { margin-top: 12px; padding: 12px 14px; background: rgba(59,142,234,0.08); border-left: 3px solid var(--accent-blue); border-radius: 0 8px 8px 0; font-size: 13px; color: var(--text); line-height: 1.7; }
+  .points-chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 11px; border-radius: 999px; font-size: 13px; font-weight: 600; margin-left: auto; }
+  .points-pos { background: rgba(76,175,125,0.15); color: var(--accent-green); }
+  .points-neg { background: rgba(226,75,74,0.15); color: var(--accent-red); }
+
+  /* ML INLINE FEEDBACK */
+  .ml-inline { margin-top: 12px; background: rgba(155,127,232,0.08); border: 0.5px solid rgba(155,127,232,0.25); border-radius: var(--radius-sm); padding: 12px 14px; }
+  .ml-inline-title { font-size: 12px; font-weight: 600; color: var(--accent-purple); margin-bottom: 8px; }
+  .ml-conf-row { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+  .ml-conf-bar-wrap { flex: 1; height: 6px; background: var(--surface2); border-radius: 999px; overflow: hidden; }
+  .ml-conf-fill { height: 100%; border-radius: 999px; }
+
+  .next-btn { display: block; width: 100%; padding: 12px; background: var(--surface2); color: var(--text); border: 0.5px solid var(--border2); border-radius: var(--radius-sm); font-size: 14px; font-weight: 600; cursor: pointer; margin-top: 10px; transition: border-color 0.2s; }
+  .next-btn:hover { border-color: var(--accent-blue); color: var(--accent-blue2); }
+
+  /* RESULTS */
+  .result-screen { text-align: center; padding: 2rem 0; }
+  .result-screen h1 { font-size: 24px; font-weight: 700; margin-bottom: 8px; }
+  .big-score { font-size: 60px; font-weight: 700; color: var(--accent-blue2); margin: 1rem 0 4px; }
+  .result-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 1.5rem 0; }
+  .result-stat { background: var(--card); border: 0.5px solid var(--border); border-radius: var(--radius-sm); padding: 14px 8px; }
+  .result-stat .rn { font-size: 22px; font-weight: 700; }
+  .result-stat .rl { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .badges-row { display: flex; justify-content: center; gap: 12px; margin: 1.5rem 0; flex-wrap: wrap; }
+  .ach-badge { background: var(--card); border: 0.5px solid var(--border); border-radius: var(--radius-sm); padding: 12px 16px; font-size: 13px; text-align: center; min-width: 90px; }
+  .ach-icon { font-size: 26px; display: block; margin-bottom: 5px; }
+  .ach-name { font-size: 11px; color: var(--muted); }
+  .tip-card { background: var(--card); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 1.2rem 1.4rem; text-align: left; margin-bottom: 1.5rem; }
+  .tip-card h3 { font-size: 14px; font-weight: 600; margin-bottom: 12px; color: var(--text); }
+  .tip { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; color: var(--muted); margin-bottom: 8px; line-height: 1.6; }
+  .tip-icon { color: var(--accent-blue); font-size: 14px; margin-top: 2px; flex-shrink: 0; }
+
+  /* ML DASHBOARD */
+  .ml-dash { background: var(--card); border: 0.5px solid rgba(155,127,232,0.3); border-radius: var(--radius); padding: 1.4rem; margin-bottom: 1.5rem; text-align: left; }
+  .ml-dash h3 { font-size: 14px; font-weight: 600; color: var(--accent-purple); margin-bottom: 12px; }
+  .ml-gauge-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+  .ml-gauge { background: var(--surface2); border-radius: var(--radius-sm); padding: 12px; }
+  .ml-gauge-label { font-size: 11px; color: var(--muted); margin-bottom: 6px; }
+  .ml-gauge-val { font-size: 20px; font-weight: 700; }
+  .ml-category-bars { font-size: 12px; }
+  .ml-cat-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .ml-cat-name { width: 130px; color: var(--muted); flex-shrink: 0; }
+  .ml-cat-bar { flex: 1; height: 6px; background: var(--surface2); border-radius: 999px; overflow: hidden; }
+  .ml-cat-fill { height: 100%; border-radius: 999px; }
+  .ml-cat-pct { width: 34px; text-align: right; color: var(--muted); }
+
+  .replay-btn { display: inline-flex; align-items: center; gap: 8px; padding: 12px 34px; background: var(--accent-blue); color: #fff; border: none; border-radius: var(--radius-sm); font-size: 14px; font-weight: 600; cursor: pointer; transition: opacity 0.2s; }
+  .replay-btn:hover { opacity: 0.88; }
+
+  /* CHATBOT */
+  .chatbot-section { background: var(--card); border: 0.5px solid var(--border2); border-radius: var(--radius); padding: 1.25rem; margin-bottom: 2rem; }
+  .chatbot-title { font-size: 14px; font-weight: 600; color: var(--accent-blue2); margin-bottom: 4px; display: flex; align-items: center; gap: 8px; }
+  .chatbot-sub { font-size: 13px; color: var(--muted); margin-bottom: 1rem; }
+  .chatbot-msgs { max-height: 200px; overflow-y: auto; margin-bottom: 10px; display: flex; flex-direction: column; gap: 8px; }
+  .bot-msg { background: var(--surface2); border-radius: 10px; padding: 9px 12px; font-size: 13px; color: var(--text); line-height: 1.6; max-width: 90%; }
+  .user-msg { background: var(--accent-blue); color: #fff; border-radius: 10px; padding: 9px 12px; font-size: 13px; line-height: 1.6; max-width: 90%; align-self: flex-end; }
+  .chatbot-input-row { display: flex; gap: 8px; }
+  .chatbot-input { flex: 1; background: var(--surface2); border: 0.5px solid var(--border2); border-radius: var(--radius-sm); padding: 9px 13px; font-size: 13px; color: var(--text); outline: none; }
+  .chatbot-input:focus { border-color: var(--accent-blue); }
+  .chatbot-send { background: var(--accent-blue); color: #fff; border: none; border-radius: var(--radius-sm); padding: 9px 16px; font-size: 13px; font-weight: 600; cursor: pointer; }
+  .chatbot-send:hover { opacity: 0.88; }
+
+  @media (max-width: 480px) {
+    .hero h1 { font-size: 26px; }
+    .result-grid { grid-template-columns: 1fr 1fr; }
+    .ml-gauge-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-logo">
+    <svg viewBox="0 0 22 22" fill="none"><path d="M11 2L3 6v6c0 4.4 3.4 8.5 8 9.4 4.6-.9 8-5 8-9.4V6L11 2z" stroke="#3b8eea" stroke-width="1.8" fill="rgba(59,142,234,0.12)"/><path d="M8 11l2 2 4-4" stroke="#5ba4f5" stroke-width="1.8" stroke-linecap="round"/></svg>
+    ScamShield Simulator
+  </div>
+  <div class="nav-score">⭐ <span class="pts" id="nav-score">0</span> pts</div>
+</nav>
+
+<div class="wrap">
+
+<!-- HOME SCREEN -->
+<div id="home" class="screen active">
+  <div class="hero">
+    <div class="hero-badge">🛡️ AI-Powered Fraud Awareness</div>
+    <h1>Can you <span>outsmart</span> the scammers?</h1>
+    <p>Play through 10 real-world fraud scenarios, get real-time ML scam detection, and learn to protect yourself online.</p>
+    <div class="badge-row">
+      <span class="pill">🎮 10 scenarios</span>
+      <span class="pill">🧠 ML detection engine</span>
+      <span class="pill">⏱ ~15 min</span>
+      <span class="pill">🏆 Earn badges</span>
+    </div>
+    <br>
+    <button class="start-btn" onclick="startGame()">▶ Start simulation</button>
+  </div>
+
+  <div class="stats-grid">
+    <div class="stat-card"><div class="num">₹1.7L Cr</div><div class="lbl">Lost to cyber fraud yearly in India</div></div>
+    <div class="stat-card"><div class="num">72%</div><div class="lbl">People can't detect phishing emails</div></div>
+    <div class="stat-card"><div class="num">93%</div><div class="lbl">Scams preventable with awareness</div></div>
+    <div class="stat-card"><div class="num">3 sec</div><div class="lbl">Average time scammers take to act</div></div>
+  </div>
+
+  <!-- ML SCAM DETECTOR -->
+  <div class="ml-section">
+    <div class="ml-section-title">🧠 Live ML Scam Detector</div>
+    <div class="ml-section-sub">Paste any suspicious message or email and our TensorFlow.js model will analyze it for scam signals in real time.</div>
+    <div class="ml-input-wrap">
+      <input class="ml-input" id="ml-text-input" placeholder="Paste suspicious message here..." />
+      <button class="ml-btn" id="ml-analyze-btn" onclick="analyzeText()">Analyze</button>
+    </div>
+    <div id="ml-result-area"></div>
+  </div>
+
+  <!-- AI CHATBOT -->
+  <div class="chatbot-section">
+    <div class="chatbot-title">💬 ScamShield AI Assistant</div>
+    <div class="chatbot-sub">Ask anything about online scams, fraud types, or how to stay safe.</div>
+    <div class="chatbot-msgs" id="chatbot-msgs">
+      <div class="bot-msg">Hi! I'm ScamShield AI. Ask me about any type of online scam — OTP fraud, phishing, job scams, UPI tricks — and I'll explain what to watch out for. 🛡️</div>
+    </div>
+    <div class="chatbot-input-row">
+      <input class="chatbot-input" id="chatbot-input" placeholder="Ask about scams..." onkeydown="if(event.key==='Enter')sendChat()" />
+      <button class="chatbot-send" onclick="sendChat()">Send</button>
+    </div>
+  </div>
+
+  <div class="section-title">Scenarios in this simulation</div>
+  <div id="scenario-index"></div>
+</div>
+
+<!-- GAME SCREEN -->
+<div id="game" class="screen">
+  <div class="game-header">
+    <button class="back-btn" onclick="goHome()">← Home</button>
+    <div class="progress-wrap">
+      <div class="progress-label"><span id="prog-label">Scenario 1 of 10</span><span id="prog-pct">0%</span></div>
+      <div class="progress-bar"><div class="progress-fill" id="prog-fill" style="width:0%"></div></div>
+    </div>
+    <div class="score-badge">⭐ <span id="score-disp">0</span></div>
+  </div>
+  <div class="risk-meter">
+    <span class="risk-label">Risk level</span>
+    <div class="risk-bar"><div class="risk-fill" id="risk-fill" style="width:0%"></div></div>
+    <span class="risk-text" id="risk-text">Low</span>
+  </div>
+  <div id="scenario-content"></div>
+  <div class="options-wrap" id="options-wrap">
+    <h3 id="options-heading">What would you do?</h3>
+    <div id="options-list"></div>
+  </div>
+  <button class="submit-btn" id="submit-btn" onclick="submitAnswer()" disabled>Confirm choice</button>
+  <div id="feedback-area"></div>
+  <button class="next-btn" id="next-btn" onclick="nextScenario()" style="display:none">Next scenario →</button>
+</div>
+
+<!-- RESULTS SCREEN -->
+<div id="results" class="screen">
+  <div class="result-screen">
+    <div style="font-size:13px;color:var(--accent-blue2);font-weight:600;letter-spacing:0.06em;margin-bottom:8px;">SIMULATION COMPLETE</div>
+    <h1>Your ScamShield Report</h1>
+    <div class="big-score" id="final-score">0</div>
+    <div style="font-size:14px;color:var(--muted);margin-top:-8px;margin-bottom:1rem;">points earned</div>
+    <div class="result-grid">
+      <div class="result-stat"><div class="rn" id="r-detected" style="color:var(--accent-green)">0</div><div class="rl">Scams detected</div></div>
+      <div class="result-stat"><div class="rn" id="r-missed" style="color:var(--accent-red)">0</div><div class="rl">Mistakes made</div></div>
+      <div class="result-stat"><div class="rn" id="r-accuracy">0%</div><div class="rl">Accuracy</div></div>
+    </div>
+    <div class="badges-row" id="badges-row"></div>
+
+    <!-- ML Dashboard -->
+    <div class="ml-dash">
+      <h3>🧠 ML Analysis of your session</h3>
+      <div class="ml-gauge-grid">
+        <div class="ml-gauge">
+          <div class="ml-gauge-label">Scam detection rate</div>
+          <div class="ml-gauge-val" id="ml-detection-rate" style="color:var(--accent-green)">—</div>
+        </div>
+        <div class="ml-gauge">
+          <div class="ml-gauge-label">Average confidence</div>
+          <div class="ml-gauge-val" id="ml-avg-conf" style="color:var(--accent-purple)">—</div>
+        </div>
+      </div>
+      <div class="ml-section-title" style="font-size:12px;margin-bottom:8px;">Scam category vulnerability</div>
+      <div class="ml-category-bars" id="ml-cat-bars"></div>
+    </div>
+
+    <div class="tip-card" id="tips-card"></div>
+    <button class="replay-btn" onclick="startGame()">↺ Play again</button>
+    <div style="margin-top:12px;">
+      <button class="back-btn" onclick="goHome()" style="margin:0 auto;display:inline-flex;">← Back to home</button>
+    </div>
+  </div>
+</div>
+
+</div><!-- /wrap -->
+
+<script>
+// ============================================================
+//  ML ENGINE — TensorFlow.js scam classifier
+// ============================================================
+
+// Feature extraction from text
+function extractFeatures(text) {
+  const t = text.toLowerCase();
+  return [
+    /urgent|immediately|within \d+ hour|hurry|act now|expire/i.test(text) ? 1 : 0,
+    /otp|password|pin|cvv|card number/i.test(text) ? 1 : 0,
+    /pay|payment|fee|charge|deposit|transfer|amount/i.test(text) ? 1 : 0,
+    /congratulations|won|winner|selected|prize|lottery/i.test(text) ? 1 : 0,
+    /click here|click this|follow link|visit link/i.test(text) ? 1 : 0,
+    /gmail\.com|yahoo\.com|hotmail\.com/.test(t) ? 1 : 0,
+    /₹|rs\.|inr|lakh|crore/i.test(text) ? 1 : 0,
+    /verify|confirm|update|validate|authenticate/i.test(text) ? 1 : 0,
+    /free|guaranteed|no risk|100%|double your/i.test(text) ? 1 : 0,
+    /bank|account|blocked|suspend|deactivat/i.test(text) ? 1 : 0,
+    /aadhaar|pan card|passport|kyc|document/i.test(text) ? 1 : 0,
+    /invest|earn|profit|return|scheme|roi/i.test(text) ? 1 : 0,
+    /http[s]?:\/\/(?!(?:www\.)?(?:google|sbi|hdfc|icici|npci)\.)/i.test(text) ? 1 : 0,
+    text.length > 200 ? 1 : 0,
+    (text.match(/[A-Z]{2,}/g) || []).length > 3 ? 1 : 0,
+    /don't tell|secret|confidential|between us/i.test(text) ? 1 : 0,
+    /registration fee|processing fee|activation fee/i.test(text) ? 1 : 0,
+    /remote access|teamviewer|anydesk/i.test(text) ? 1 : 0,
+    /qr code|scan.*receive|scan.*money/i.test(text) ? 1 : 0,
+    /work from home|no interview|no experience/i.test(text) ? 1 : 0,
+  ];
+}
+
+// Scam type classification
+function classifyScamType(text) {
+  const t = text.toLowerCase();
+  if (/otp|bank.*call|account.*block/i.test(text)) return 'OTP / Bank fraud';
+  if (/internship|job|offer letter|salary/i.test(text)) return 'Job / Internship scam';
+  if (/lottery|won|prize|congratulations/i.test(text)) return 'Lottery scam';
+  if (/invest|profit|return|scheme/i.test(text)) return 'Investment fraud';
+  if (/upi|payment|screenshot|qr/i.test(text)) return 'UPI / Payment scam';
+  if (/click|login|verify.*account|phish/i.test(text)) return 'Phishing';
+  if (/tech support|computer.*virus|microsoft|apple/i.test(text)) return 'Tech support scam';
+  if (/friend.*money|emergency|help me/i.test(text)) return 'Impersonation scam';
+  return 'General scam';
+}
+
+function getRedFlagWords(text) {
+  const patterns = [
+    { re: /urgent|immediately|within \d+ hour|hurry|act now/i, label: 'Urgency pressure' },
+    { re: /otp|password|pin|cvv/i, label: 'Requests sensitive credentials' },
+    { re: /registration fee|processing fee|activation fee/i, label: 'Upfront fee demand' },
+    { re: /congratulations|won|winner|prize/i, label: 'Fake prize / lottery claim' },
+    { re: /gmail\.com|yahoo\.com/i, label: 'Non-corporate email domain' },
+    { re: /guaranteed|100%|no risk/i, label: 'Unrealistic guarantees' },
+    { re: /don't tell|secret|between us/i, label: 'Secrecy / isolation tactic' },
+    { re: /qr code|scan.*receive/i, label: 'Fake QR receive trick' },
+    { re: /remote access|teamviewer|anydesk/i, label: 'Remote access request' },
+    { re: /invest|double your|10x/i, label: 'Suspicious investment claim' },
+  ];
+  return patterns.filter(p => p.re.test(text)).map(p => p.label);
+}
+
+let mlModel = null;
+
+async function buildMLModel() {
+  const model = tf.sequential();
+  model.add(tf.layers.dense({ inputShape: [20], units: 32, activation: 'relu' }));
+  model.add(tf.layers.dropout({ rate: 0.2 }));
+  model.add(tf.layers.dense({ units: 16, activation: 'relu' }));
+  model.add(tf.layers.dense({ units: 1, activation: 'sigmoid' }));
+  model.compile({ optimizer: 'adam', loss: 'binaryCrossentropy', metrics: ['accuracy'] });
+
+  // Synthetic training data — scam = 1, legit = 0
+  const scamTexts = [
+    "Congratulations! You won ₹25 lakh lottery. Pay ₹999 to claim now. Hurry!",
+    "Your account will be blocked. Share OTP immediately to prevent this.",
+    "Pay ₹500 registration fee within 24 hours to confirm your internship.",
+    "Guaranteed 10x returns in 7 days. Invest ₹10,000 today. Limited slots!",
+    "Scan this QR code to receive ₹5,000 payment from abroad.",
+    "Your computer is infected! Call Microsoft support immediately.",
+    "I'm your friend, lost my phone. Send ₹2,000 urgently. Don't tell anyone.",
+    "Click here to verify your SBI account. Link expires in 12 hours.",
+    "Job offer: ₹1,00,000/month. Work from home. No interview required. Reply with Aadhaar.",
+    "OTP required to complete KYC. Share to avoid account suspension.",
+    "You have been selected! Pay activation fee ₹1,500 via UPI to activate offer.",
+    "URGENT: Your PAN card will be blocked. Verify details at this link now.",
+    "Double your money in 48 hours. 100% guaranteed returns. WhatsApp us.",
+    "Free iPhone! Just pay ₹99 shipping. Offer valid today only. Click here!",
+    "Bank helpline: Your card is blocked. Share card number to restore access.",
+  ];
+  const legitTexts = [
+    "Your order has been shipped. Track it at our official website.",
+    "Meeting scheduled for 3pm tomorrow. Please confirm attendance.",
+    "Your monthly statement is ready. Login to netbanking to view.",
+    "Password reset link sent to your email. Valid for 30 minutes.",
+    "Thank you for your purchase. Your receipt is attached.",
+    "Interview scheduled for Monday 10am at our office in Bangalore.",
+    "Your salary has been credited. Please check your account.",
+    "Please complete your KYC by visiting the nearest branch with documents.",
+    "Your subscription will renew on July 1st. No action needed.",
+    "We have received your application. Our team will review and contact you.",
+    "Your electricity bill of ₹1,450 is due on 25th. Pay via official app.",
+    "Appointment confirmed for Saturday. Bring your ID proof.",
+    "Your flight PNR is XYZ123. Web check-in opens 48 hours before departure.",
+    "Security alert: New login from Chrome. If this was you, no action needed.",
+    "Your refund of ₹2,300 is processed and will reflect in 3-5 business days.",
+  ];
+
+  const allTexts = [...scamTexts, ...legitTexts];
+  const labels = [...Array(scamTexts.length).fill(1), ...Array(legitTexts.length).fill(0)];
+  const features = allTexts.map(extractFeatures);
+
+  const xs = tf.tensor2d(features);
+  const ys = tf.tensor2d(labels, [labels.length, 1]);
+
+  await model.fit(xs, ys, { epochs: 80, verbose: 0, shuffle: true });
+  xs.dispose(); ys.dispose();
+  return model;
+}
+
+// Initialize model
+(async () => {
+  try {
+    mlModel = await buildMLModel();
+    document.getElementById('ml-analyze-btn').disabled = false;
+    document.getElementById('ml-analyze-btn').textContent = 'Analyze';
+  } catch (e) {
+    console.warn('TF model init failed:', e);
+  }
+})();
+
+async function analyzeText() {
+  const text = document.getElementById('ml-text-input').value.trim();
+  if (!text) return;
+  const resultArea = document.getElementById('ml-result-area');
+  resultArea.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px 0;">Analyzing...</div>';
+
+  let scamProb = 0.5;
+  if (mlModel) {
+    try {
+      const features = extractFeatures(text);
+      const input = tf.tensor2d([features]);
+      const pred = mlModel.predict(input);
+      scamProb = (await pred.data())[0];
+      input.dispose(); pred.dispose();
+    } catch (e) {
+      // fallback: rule-based
+      const feats = extractFeatures(text);
+      scamProb = feats.reduce((a, b) => a + b, 0) / feats.length;
+    }
+  } else {
+    const feats = extractFeatures(text);
+    scamProb = Math.min(feats.reduce((a, b) => a + b, 0) / 8, 1);
+  }
+
+  const isScam = scamProb > 0.5;
+  const legitProb = 1 - scamProb;
+  const scamType = classifyScamType(text);
+  const redFlags = getRedFlagWords(text);
+
+  resultArea.innerHTML = `
+    <div class="ml-result">
+      <div class="ml-result-label">Model confidence</div>
+      <div class="ml-bar-wrap">
+        <div class="ml-bar-label"><span style="color:var(--accent-red)">Scam</span><span>${Math.round(scamProb*100)}%</span></div>
+        <div class="ml-bar"><div class="ml-bar-fill" style="width:${Math.round(scamProb*100)}%;background:var(--accent-red)"></div></div>
+      </div>
+      <div class="ml-bar-wrap">
+        <div class="ml-bar-label"><span style="color:var(--accent-green)">Legitimate</span><span>${Math.round(legitProb*100)}%</span></div>
+        <div class="ml-bar"><div class="ml-bar-fill" style="width:${Math.round(legitProb*100)}%;background:var(--accent-green)"></div></div>
+      </div>
+      <div class="ml-verdict ${isScam ? 'scam' : 'safe'}">
+        ${isScam ? '🚨 Likely a scam' : '✅ Appears legitimate'}
+        ${isScam ? ' — ' + scamType : ''}
+      </div>
+      ${redFlags.length > 0 ? `<div class="ml-features" style="margin-top:10px;"><div style="font-size:12px;color:var(--muted);margin-bottom:6px;">Detected red flags:</div>${redFlags.map(f => `<span class="ml-feature-chip danger">⚠ ${f}</span>`).join('')}</div>` : ''}
+    </div>
+  `;
+}
+
+// ============================================================
+//  CHATBOT
+// ============================================================
+const chatResponses = {
+  'otp': "An OTP (One-Time Password) scam is when someone calls pretending to be your bank and asks for the OTP sent to your phone. Banks NEVER ask for OTPs. Hang up and call your bank's official number.",
+  'phishing': "Phishing emails pretend to be from banks or companies with fake links. Check the sender's domain carefully — banks use official domains like sbi.co.in, not gmail.com or unusual .net/.in domains.",
+  'upi': "UPI scams often involve fake payment screenshots or QR codes. Always check your bank app directly. Scanning a QR code means you PAY — you can never receive money by scanning someone else's QR.",
+  'lottery': "Lottery scams tell you that you've won money but ask you to pay a 'processing fee' first. You never win a lottery you didn't enter. Delete and block.",
+  'job': "Fake job scams offer unrealistically high salaries with no interviews. Legitimate employers never ask for money before hiring. Verify companies on LinkedIn and official portals like Naukri.",
+  'investment': "Investment scams promise guaranteed high returns quickly. SEBI-registered advisors cannot guarantee returns. Any 'guaranteed 10x in 7 days' scheme is illegal and fraudulent.",
+  'qr': "QR code scams work because UPI QR codes are payment requests — scanning one makes YOU pay, not receive. There is no mechanism to receive money via QR scan on UPI.",
+  'internship': "Internship scams ask for upfront registration fees. Legitimate internships are free. No real company charges candidates money before they start working.",
+  'tech support': "Tech support scams show fake browser pop-ups with virus warnings and phone numbers. Microsoft/Apple never contact you this way. Close the browser tab and run your actual antivirus.",
+  'default': "Great question! Scams generally use three tactics: urgency (act now!), fear (your account is blocked!), and greed (you won!). Slow down, verify independently, and never share OTPs, passwords, or pay upfront fees to strangers."
+};
+
+function sendChat() {
+  const input = document.getElementById('chatbot-input');
+  const text = input.value.trim();
+  if (!text) return;
+  const msgs = document.getElementById('chatbot-msgs');
+
+  const userDiv = document.createElement('div');
+  userDiv.className = 'user-msg';
+  userDiv.textContent = text;
+  msgs.appendChild(userDiv);
+
+  const t = text.toLowerCase();
+  let response = chatResponses.default;
+  for (const [key, val] of Object.entries(chatResponses)) {
+    if (t.includes(key)) { response = val; break; }
+  }
+
+  setTimeout(() => {
+    const botDiv = document.createElement('div');
+    botDiv.className = 'bot-msg';
+    botDiv.textContent = response;
+    msgs.appendChild(botDiv);
+    msgs.scrollTop = msgs.scrollHeight;
+  }, 500);
+
+  input.value = '';
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+// ============================================================
+//  SCENARIOS
+// ============================================================
+const scenarios = [
+  {
+    id: 1, title: "Internship offer scam", tag: "📧 Email", risk: 80, diff: "easy", category: "Job/Internship",
+    render: () => `<div class="email-mock">
+      <div class="email-header">
+        <span class="email-date">Today, 9:41 AM</span>
+        <div class="email-from"><strong>XYZ Technologies HR</strong> &lt;hr.xyztechnologies@gmail.com&gt;</div>
+        <div class="email-subject">Congratulations! Paid Internship Selection — Action Required</div>
+      </div>
+      <div class="email-body">Dear Candidate,<br><br>You have been <strong>selected for a paid internship</strong> at XYZ Technologies.<br><br><span class="email-hl">To confirm your position, pay ₹500 registration fees within 24 hours.</span><br><br>Payment: http://xyztechnologies-registration.in/pay<br><br>— HR Team</div></div>`,
+    options: ["Pay immediately via UPI", "Verify the company website and recruiter identity", "Share bank details for salary setup", "Send Aadhaar and résumé immediately"],
+    correct: [1], points: 100,
+    feedback: { title: "Classic internship scam", flags: ["No legitimate employer charges registration fees", "24-hour urgency pressure", "Gmail instead of official domain", "Unverifiable company name"], learn: "Legitimate employers never ask candidates to pay fees. Verify on LinkedIn and call their listed HR number." }
+  },
+  {
+    id: 2, title: "OTP phone scam", tag: "📞 Phone call", risk: 95, diff: "easy", category: "OTP/Bank fraud",
+    render: () => `<div class="chat-mock">
+      <div class="bubble-label">Incoming call — Unknown: +91-98XXXXXX11</div>
+      <div class="chat-bubble bubble-in">Hello sir, I'm calling from State Bank of India. Your account has been flagged and will be <strong>blocked in 2 hours</strong>.</div>
+      <div class="chat-bubble bubble-in">Please share the OTP sent to your number to verify your identity and prevent blockage.</div></div>`,
+    options: ["Share the OTP to unblock account", "Ask for employee ID and call the official bank helpline to verify", "Disconnect the call immediately", "Share your debit card number for verification"],
+    correct: [1, 2], points: 100,
+    feedback: { title: "Banks NEVER ask for OTPs", flags: ["No bank ever asks customers for OTPs", "2-hour urgency to cause panic", "Unknown mobile caller, not bank number", "Threatening language bypasses rational thinking"], learn: "An OTP is meant only for you. Hang up and call your bank's official number (on the back of your card) directly." }
+  },
+  {
+    id: 3, title: "Fake UPI payment screenshot", tag: "💬 WhatsApp", risk: 70, diff: "med", category: "UPI/Payment scam",
+    render: () => `<div class="chat-mock">
+      <div class="bubble-label">WhatsApp — Buyer (Unknown number)</div>
+      <div class="chat-bubble bubble-in">Hi, I want to buy your laptop from OLX. I've sent the payment — screenshot below.</div>
+      <div style="background:#1e2030;border:0.5px solid rgba(76,175,125,0.4);border-radius:10px;padding:12px;margin-bottom:8px;">
+        <div style="color:var(--accent-green);font-weight:600;font-size:15px;margin-bottom:4px;">✔ Payment Successful</div>
+        <div style="color:var(--muted);">₹25,000 sent to you</div>
+        <div style="color:var(--hint);font-size:11px;margin-top:4px;">Ref: UTR8823XXXX • 2 min ago</div>
+      </div>
+      <div class="chat-bubble bubble-in">Please hand over the laptop. Payment is done!</div></div>`,
+    options: ["Trust the screenshot and hand over the laptop", "Check actual bank account balance and transaction history", "Hand over product and check later"],
+    correct: [1], points: 100,
+    feedback: { title: "UPI screenshots can be completely faked", flags: ["Fake screenshots are created in seconds using free apps", "No money reached your account", "Buyer rushing to hand over product", "UTR reference number may be fabricated"], learn: "Open your bank app and confirm the exact transaction BEFORE handing over any goods." }
+  },
+  {
+    id: 4, title: "Phishing email", tag: "📧 Email", risk: 85, diff: "med", category: "Phishing",
+    render: () => `<div class="email-mock">
+      <div class="email-header">
+        <span class="email-date">Today, 3:17 PM</span>
+        <div class="email-from"><strong>SBI NetBanking Alert</strong> &lt;security@sbionline-verify.net&gt;</div>
+        <div class="email-subject">URGENT: Your account access has been suspended</div>
+      </div>
+      <div class="fake-site" style="margin:0;border-radius:0;border:none;border-top:0.5px solid var(--border);">
+        <div class="fake-site-bar">🔓 <span class="fake-site-url">http://sbionline-verify.net/restore</span></div>
+        <div class="email-body">Dear Customer,<br><br>Your SBI account has been <strong>suspended due to suspicious activity</strong>.<br><br><span class="email-hl">Click here to restore access → http://sbionline-verify.net/restore</span><br><br>Failure to act within 12 hours will result in permanent account closure.<br><br>— SBI Security Team</div></div></div>`,
+    options: ["Click link and enter login credentials", "Notice red flags: wrong domain, threatening language", "Call SBI customer care on official number 1800-11-2211", "Forward to family for advice"],
+    correct: [1, 2], points: 100,
+    feedback: { title: "Classic phishing — multiple red flags", flags: ["Domain is sbionline-verify.net — SBI's real domain is sbi.co.in", "Threatening 'permanent closure' to cause panic", "Banks never ask you to click email links", "Generic 'Dear Customer' greeting — no personalization"], learn: "Hover over links to see real URLs. Go directly to the bank's official website — never through an email link." }
+  },
+  {
+    id: 5, title: "Fake job offer letter", tag: "📧 Email", risk: 75, diff: "easy", category: "Job/Internship",
+    render: () => `<div class="email-mock">
+      <div class="email-header">
+        <span class="email-date">Yesterday, 11:03 PM</span>
+        <div class="email-from"><strong>Global Hiring Solutions</strong> &lt;jobs.offer2024@yahoo.com&gt;</div>
+        <div class="email-subject">Offer Letter — Work From Home ₹1,00,000/month — No Interview</div>
+      </div>
+      <div class="email-body">Congratulations!<br><br>You have been selected for a <strong>Data Entry Executive</strong> position.<br><br>Salary: <span class="email-hl">₹1,00,000/month</span><br>Mode: Work From Home | <span class="email-hl">No interview required</span><br>Start Date: Immediately<br><br>Reply with your Aadhaar number and bank account details to complete onboarding.</div></div>`,
+    options: ["Reply with Aadhaar and bank details immediately", "Research the company on LinkedIn and official job portals", "Question why no interview for such a high salary", "Ignore and report as spam"],
+    correct: [1, 2, 3], points: 100,
+    feedback: { title: "Too good to be true — it always is", flags: ["₹1 lakh/month for data entry is unrealistic", "No interview — real companies always screen candidates", "Yahoo email domain, not corporate", "Requesting Aadhaar + bank details upfront"], learn: "Verify jobs on LinkedIn, Glassdoor, or Naukri. Real employers never ask for bank details before employment." }
+  },
+  {
+    id: 6, title: "Lottery / prize scam", tag: "📱 SMS", risk: 60, diff: "easy", category: "Lottery scam",
+    render: () => `<div class="sms-mock">
+      <div class="sms-sender">SMS — +91-70XXXXXX44</div>
+      Congratulations! You have WON ₹25,00,000 in the National Digital Lottery 2024!<br><br>
+      To claim your prize, click: http://ndlottery-claim.in<br><br>
+      Enter your details + pay <strong>₹999 processing fee</strong>. Offer valid 24 hrs only!</div>`,
+    options: ["Click link and pay ₹999 processing fee", "Delete the message and block the number", "Call the number to verify the prize", "Share on WhatsApp to help family win"],
+    correct: [1], points: 100,
+    feedback: { title: "You never entered a lottery — you can't win one", flags: ["You never registered for any lottery", "Prize claims never require upfront fees", "Suspicious domain, not a government site", "24-hour urgency is a pressure tactic"], learn: "Any prize requiring you to pay first is a scam. Real lotteries deduct taxes from winnings — they never ask for payment upfront." }
+  },
+  {
+    id: 7, title: "Tech support pop-up scam", tag: "🖥️ Pop-up", risk: 65, diff: "med", category: "Tech support scam",
+    render: () => `<div class="fake-site">
+      <div class="fake-site-bar">⚠️ <span class="fake-site-url">http://windows-security-alert.com/virus-detected</span></div>
+      <div class="popup-mock" style="margin:12px;border-radius:8px;">
+        <div class="popup-title">⚠ CRITICAL SECURITY ALERT</div>
+        <div class="popup-body"><strong>Your computer is INFECTED with 5 viruses!</strong><br><br>Personal data and banking credentials are at risk.<br><br>Call Microsoft Support immediately: <strong>1800-XXX-XXXX</strong><br><br><em>Do NOT close this window or your data will be permanently deleted.</em></div>
+      </div></div>`,
+    options: ["Call the number shown in the pop-up", "Close the browser tab immediately", "Download the fix tool linked in the pop-up", "Give remote access to the caller to fix your PC"],
+    correct: [1], points: 100,
+    feedback: { title: "Microsoft never shows phone numbers in browser pop-ups", flags: ["Legitimate OS makers never show phone numbers in browser warnings", "Pop-up designed to prevent you from closing (fake)", "'Do NOT close' is a fear tactic", "Remote access gives scammers full control of your device"], learn: "Close the browser (Task Manager if needed). Run your actual antivirus. Microsoft, Google, Apple will never ask you to call a number in a browser pop-up." }
+  },
+  {
+    id: 8, title: "QR code payment scam", tag: "💬 WhatsApp", risk: 80, diff: "hard", category: "UPI/Payment scam",
+    render: () => `<div class="chat-mock">
+      <div class="bubble-label">WhatsApp — Unknown contact</div>
+      <div class="chat-bubble bubble-in">Hi! I'm sending you ₹5,000 from abroad. Please scan this QR code on your UPI app to receive the money.</div>
+      <div class="qr-mock">
+        <div class="qr-box">⬛</div>
+        <div class="qr-lbl">Scan to "receive" payment</div>
+      </div>
+      <div class="chat-bubble bubble-in">Scan quickly — my UPI session expires soon!</div></div>`,
+    options: ["Scan the QR code to receive money", "Refuse — QR codes are for paying, not receiving", "Ask why they can't do a bank transfer instead", "Block and report the contact"],
+    correct: [1, 2, 3], points: 100,
+    feedback: { title: "Scanning QR codes sends money — never receives it", flags: ["UPI QR codes are payment requests, not receive links", "Strangers offering money unprompted = bait", "Urgency pressure — 'expires soon'", "Unknown number with no prior relationship"], learn: "In UPI, scanning a QR code means YOU pay. There is no mechanism to receive money by scanning someone else's QR code." }
+  },
+  {
+    id: 9, title: "Social media impersonation", tag: "📸 Instagram DM", risk: 70, diff: "med", category: "Impersonation",
+    render: () => `<div class="chat-mock">
+      <div class="bubble-label">Instagram DM — @rahul_friend2 (0 posts, created today)</div>
+      <div class="chat-bubble bubble-in">Hey yaar! It's Rahul. I lost my phone and created this new account. Emergency situation — my wallet got stolen at the station.</div>
+      <div class="chat-bubble bubble-in">Please send ₹2,000 on this UPI: rahul.help@paytm — I'll return it tomorrow. <em>Don't tell anyone, it's embarrassing 😅</em></div></div>`,
+    options: ["Send ₹2,000 immediately to help your friend", "Call Rahul on his actual known phone number to verify", "Ask a question only the real Rahul would know", "Check if the account is new with no followers"],
+    correct: [1, 2, 3], points: 100,
+    feedback: { title: "Verify through a different channel first", flags: ["New account with 0 posts — not the real friend", "Urgency + embarrassment prevent verification", "'Don't tell anyone' — classic isolation manipulation", "Unverified UPI handle, not your friend's"], learn: "Always call the actual person on their known number before sending money. The 'don't tell anyone' line is designed to prevent a second opinion." }
+  },
+  {
+    id: 10, title: "Investment / Ponzi scheme", tag: "💬 Telegram", risk: 90, diff: "hard", category: "Investment fraud",
+    render: () => `<div class="chat-mock">
+      <div class="bubble-label">Telegram — 'Wealth Masters India' group (12,430 members)</div>
+      <div class="chat-bubble bubble-in">📈 Today's profit update: Members who invested ₹10,000 last week received <strong>₹95,000 today!</strong></div>
+      <div class="chat-bubble bubble-in">Limited slots this week. Invest ₹10,000–₹5,00,000. <span style="color:var(--accent-amber)">Guaranteed 10x returns in 7 days.</span> DM @wealthguru_india</div>
+      <div class="chat-bubble bubble-in">Hurry — only 12 slots left!</div></div>`,
+    options: ["Invest ₹10,000 to start earning", "Recognize this as a Ponzi scheme and report to SEBI", "Research SEBI-registered investment advisors instead", "Ask for their SEBI registration certificate number"],
+    correct: [1, 2, 3], points: 100,
+    feedback: { title: "No legitimate investment guarantees 10x in 7 days", flags: ["Guaranteed returns are illegal for SEBI-registered advisors", "Fake member count and fabricated testimonials", "'Limited slots' is artificial scarcity", "No SEBI registration, no regulated broker"], learn: "Any scheme promising fixed high returns quickly is a Ponzi scheme. Report to SEBI at sebi.gov.in or cybercrime.gov.in. Call 1930 for cyber fraud helpline." }
+  }
+];
+
+// ============================================================
+//  GAME LOGIC
+// ============================================================
+let currentIdx = 0, score = 0, selected = [], answered = false, correctCount = 0, wrongCount = 0;
+let sessionMLConfidences = [];
+let categoryResults = {};
+
+function buildIndex() {
+  const el = document.getElementById('scenario-index');
+  el.innerHTML = scenarios.map((s, i) => `
+    <div class="s-item" onclick="startGame(${i})">
+      <div class="s-icon">${s.tag.split(' ')[0]}</div>
+      <div style="flex:1">
+        <div class="s-title">${s.title}</div>
+        <div class="s-sub">${s.tag.replace(/^[^ ]+ /, '')}</div>
+      </div>
+      <span class="s-diff diff-${s.diff}">${s.diff === 'easy' ? 'Beginner' : s.diff === 'med' ? 'Intermediate' : 'Expert'}</span>
+    </div>`).join('');
+}
+
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  window.scrollTo(0, 0);
+}
+
+function goHome() { showScreen('home'); }
+
+function startGame(fromIdx) {
+  currentIdx = typeof fromIdx === 'number' ? fromIdx : 0;
+  score = 0; correctCount = 0; wrongCount = 0;
+  sessionMLConfidences = []; categoryResults = {};
+  document.getElementById('score-disp').textContent = 0;
+  document.getElementById('nav-score').textContent = 0;
+  showScreen('game');
+  renderScenario();
+}
+
+function renderScenario() {
+  const s = scenarios[currentIdx];
+  selected = []; answered = false;
+
+  const pct = Math.round((currentIdx / scenarios.length) * 100);
+  document.getElementById('prog-label').textContent = `Scenario ${currentIdx + 1} of ${scenarios.length}`;
+  document.getElementById('prog-pct').textContent = pct + '%';
+  document.getElementById('prog-fill').style.width = pct + '%';
+
+  const rf = document.getElementById('risk-fill');
+  rf.style.width = s.risk + '%';
+  rf.style.background = s.risk >= 80 ? 'var(--accent-red)' : s.risk >= 60 ? 'var(--accent-amber)' : 'var(--accent-green)';
+  document.getElementById('risk-text').textContent = s.risk >= 80 ? 'High' : s.risk >= 60 ? 'Medium' : 'Low';
+  document.getElementById('risk-text').style.color = s.risk >= 80 ? 'var(--accent-red)' : s.risk >= 60 ? 'var(--accent-amber)' : 'var(--accent-green)';
+
+  document.getElementById('scenario-content').innerHTML = `
+    <div class="scenario-card">
+      <span class="scenario-tag">${s.tag}</span>
+      <div class="scenario-title">${s.title}</div>
+      ${s.render()}
+    </div>`;
+
+  document.getElementById('options-list').innerHTML = s.options.map((o, i) => `
+    <button class="option-btn" id="opt-${i}" onclick="toggleOption(${i})">
+      <span class="opt-key">${String.fromCharCode(65 + i)}</span>${o}
+    </button>`).join('');
+
+  document.getElementById('options-heading').textContent = s.correct.length > 1 ? 'Select all correct responses' : 'What would you do?';
+  document.getElementById('submit-btn').disabled = true;
+  document.getElementById('submit-btn').style.display = 'block';
+  document.getElementById('feedback-area').innerHTML = '';
+  document.getElementById('next-btn').style.display = 'none';
+}
+
+function toggleOption(i) {
+  if (answered) return;
+  const multi = scenarios[currentIdx].correct.length > 1;
+  if (!multi) selected = [i];
+  else {
+    const idx = selected.indexOf(i);
+    if (idx > -1) selected.splice(idx, 1); else selected.push(i);
+  }
+  scenarios[currentIdx].options.forEach((_, j) => {
+    document.getElementById('opt-' + j).classList.toggle('selected', selected.includes(j));
+  });
+  document.getElementById('submit-btn').disabled = selected.length === 0;
+}
+
+async function submitAnswer() {
+  const s = scenarios[currentIdx];
+  answered = true;
+  document.getElementById('submit-btn').style.display = 'none';
+
+  const correctSet = new Set(s.correct);
+  const selectedSet = new Set(selected);
+  const isCorrect = [...correctSet].every(c => selectedSet.has(c)) && [...selectedSet].every(c => correctSet.has(c));
+
+  s.options.forEach((_, i) => {
+    const btn = document.getElementById('opt-' + i);
+    btn.disabled = true;
+    btn.classList.remove('selected');
+    if (correctSet.has(i)) btn.classList.add('correct');
+    else if (selectedSet.has(i)) btn.classList.add('wrong');
+  });
+
+  const pts = isCorrect ? s.points : -Math.round(s.points * 0.3);
+  score = Math.max(0, score + pts);
+  if (isCorrect) correctCount++; else wrongCount++;
+
+  // Track category
+  if (!categoryResults[s.category]) categoryResults[s.category] = { correct: 0, total: 0 };
+  categoryResults[s.category].total++;
+  if (isCorrect) categoryResults[s.category].correct++;
+
+  document.getElementById('score-disp').textContent = score;
+  document.getElementById('nav-score').textContent = score;
+
+  // ML confidence for this scenario
+  let mlConf = 0.5;
+  if (mlModel) {
+    try {
+      const scenarioText = s.feedback.flags.join(' ') + ' ' + s.feedback.title;
+      const feats = extractFeatures(scenarioText);
+      const input = tf.tensor2d([feats]);
+      const pred = mlModel.predict(input);
+      mlConf = (await pred.data())[0];
+      input.dispose(); pred.dispose();
+    } catch (e) {}
+  }
+  sessionMLConfidences.push(mlConf);
+
+  document.getElementById('feedback-area').innerHTML = `
+    <div class="feedback-card ${isCorrect ? 'correct' : 'wrong'}">
+      <div class="feedback-title">
+        ${isCorrect ? '✅ Correct! Well spotted.' : '❌ ' + s.feedback.title}
+        <span class="points-chip ${pts >= 0 ? 'points-pos' : 'points-neg'}">${pts >= 0 ? '+' : ''}${pts} pts</span>
+      </div>
+      <div>${s.feedback.flags.map(f => `<div class="red-flag"><div class="flag-dot"></div><span>${f}</span></div>`).join('')}</div>
+      <div class="learning">💡 <strong>Key takeaway:</strong> ${s.feedback.learn}</div>
+      <div class="ml-inline">
+        <div class="ml-inline-title">🧠 ML model confidence on this scam type</div>
+        <div class="ml-conf-row">
+          <span style="width:80px;flex-shrink:0">Scam prob.</span>
+          <div class="ml-conf-bar-wrap"><div class="ml-conf-fill" style="width:${Math.round(mlConf*100)}%;background:var(--accent-red)"></div></div>
+          <span style="width:40px;text-align:right">${Math.round(mlConf*100)}%</span>
+        </div>
+        <div class="ml-conf-row">
+          <span style="width:80px;flex-shrink:0">Safe prob.</span>
+          <div class="ml-conf-bar-wrap"><div class="ml-conf-fill" style="width:${Math.round((1-mlConf)*100)}%;background:var(--accent-green)"></div></div>
+          <span style="width:40px;text-align:right">${Math.round((1-mlConf)*100)}%</span>
+        </div>
+      </div>
+    </div>`;
+
+  document.getElementById('next-btn').style.display = 'block';
+  document.getElementById('next-btn').textContent = currentIdx < scenarios.length - 1 ? 'Next scenario →' : 'See results →';
+}
+
+function nextScenario() {
+  currentIdx++;
+  if (currentIdx >= scenarios.length) showResults();
+  else renderScenario();
+}
+
+function showResults() {
+  showScreen('results');
+  document.getElementById('final-score').textContent = score;
+  document.getElementById('r-detected').textContent = correctCount;
+  document.getElementById('r-missed').textContent = wrongCount;
+  document.getElementById('r-accuracy').textContent = Math.round((correctCount / scenarios.length) * 100) + '%';
+
+  // Badges
+  const badges = [];
+  if (correctCount >= 10) badges.push({ icon: '🛡️', name: 'Perfect Shield' });
+  if (correctCount >= 7) badges.push({ icon: '👁️', name: 'Eagle Eye' });
+  if (score >= 800) badges.push({ icon: '🏆', name: 'Fraud Fighter' });
+  if (wrongCount === 0) badges.push({ icon: '⭐', name: 'Untouchable' });
+  if (correctCount >= 5 && correctCount < 7) badges.push({ icon: '🎯', name: 'On Track' });
+  if (badges.length === 0) badges.push({ icon: '📚', name: 'Learning' });
+  document.getElementById('badges-row').innerHTML = badges.map(b => `
+    <div class="ach-badge"><span class="ach-icon">${b.icon}</span><div class="ach-name">${b.name}</div></div>`).join('');
+
+  // ML dashboard
+  const avgConf = sessionMLConfidences.length ? sessionMLConfidences.reduce((a, b) => a + b, 0) / sessionMLConfidences.length : 0;
+  document.getElementById('ml-detection-rate').textContent = Math.round((correctCount / scenarios.length) * 100) + '%';
+  document.getElementById('ml-avg-conf').textContent = Math.round(avgConf * 100) + '%';
+
+  const catColors = ['#3b8eea', '#9b7fe8', '#4caf7d', '#f0a832', '#e24b4a', '#5ba4f5'];
+  const catBars = Object.entries(categoryResults).map(([cat, res], i) => {
+    const pct = Math.round((res.correct / res.total) * 100);
+    return `<div class="ml-cat-row">
+      <span class="ml-cat-name">${cat}</span>
+      <div class="ml-cat-bar"><div class="ml-cat-fill" style="width:${pct}%;background:${catColors[i % catColors.length]}"></div></div>
+      <span class="ml-cat-pct">${pct}%</span></div>`;
+  }).join('');
+  document.getElementById('ml-cat-bars').innerHTML = catBars || '<div style="color:var(--muted);font-size:12px;">No data</div>';
+
+  // Tips
+  const tips = [];
+  if (wrongCount > 5) tips.push("Always verify sender domains before clicking any link in emails.");
+  if (wrongCount > 3) tips.push("Urgency is a manipulation tool — slow down before deciding.");
+  tips.push("Call official numbers (on cards or bank websites) to verify claims.");
+  tips.push("Check your bank app directly — never trust screenshots or verbal claims.");
+  tips.push("Report fraud: cybercrime.gov.in | Cyber fraud helpline: 1930");
+
+  document.getElementById('tips-card').innerHTML = `<h3>💡 Personalized improvement tips</h3>` +
+    tips.slice(0, 4).map(t => `<div class="tip"><span class="tip-icon">→</span>${t}</div>`).join('');
+}
+
+buildIndex();
+</script>
+</body>
+</html>
